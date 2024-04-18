@@ -1,0 +1,68 @@
+Date : 2024-04-10 15:43:59
+Directory : /Users/elibutters/Documents/HITM
+Total : 35 files,  345132 codes, 42 comments, 1359 blanks, all 346533 lines
+
+Languages
++--------------+------------+------------+------------+------------+------------+
+| language     | files      | code       | comment    | blank      | total      |
++--------------+------------+------------+------------+------------+------------+
+| XML          |         14 |    284,654 |          0 |      1,167 |    285,821 |
+| JSON         |          9 |     41,113 |          0 |          9 |     41,122 |
+| CSV          |          7 |     18,737 |          0 |          6 |     18,743 |
+| Python       |          2 |        621 |         42 |        175 |        838 |
+| Markdown     |          1 |          7 |          0 |          2 |          9 |
+| (Read Error) |          2 |          0 |          0 |          0 |          0 |
++--------------+------------+------------+------------+------------+------------+
+
+Directories
++-----------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                  | files      | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                     |         35 |    345,132 |         42 |      1,359 |    346,533 |
+| . (Files)                                                             |         12 |     41,741 |         42 |        186 |     41,969 |
+| all_models                                                            |         14 |    284,654 |          0 |      1,167 |    285,821 |
+| data                                                                  |          6 |     18,725 |          0 |          3 |     18,728 |
+| model_scores                                                          |          3 |         12 |          0 |          3 |         15 |
++-----------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-----------------------------------------------------------------------+--------------+------------+------------+------------+------------+
+| filename                                                              | language     | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------+--------------+------------+------------+------------+------------+
+| /Users/elibutters/Documents/HITM/README.md                            | Markdown     |          7 |          0 |          2 |          9 |
+| /Users/elibutters/Documents/HITM/S1_IVS_construction.ipynb            | JSON         |        178 |          0 |          1 |        179 |
+| /Users/elibutters/Documents/HITM/S2_surface_sampling.ipynb            | JSON         |      3,550 |          0 |          1 |      3,551 |
+| /Users/elibutters/Documents/HITM/S3_STD_IVS_viz.ipynb                 | JSON         |        778 |          0 |          1 |        779 |
+| /Users/elibutters/Documents/HITM/S4_IVS_ARB_Break_viz.ipynb           | JSON         |     29,961 |          0 |          1 |     29,962 |
+| /Users/elibutters/Documents/HITM/S5_train_VAE.ipynb                   | JSON         |        387 |          0 |          1 |        388 |
+| /Users/elibutters/Documents/HITM/S6_grab_exogenous_variables.ipynb    | JSON         |        176 |          0 |          1 |        177 |
+| /Users/elibutters/Documents/HITM/S7_train_LSTM.ipynb                  | JSON         |      2,272 |          0 |          1 |      2,273 |
+| /Users/elibutters/Documents/HITM/S8_statarb_free_DNN.ipynb            | JSON         |      3,766 |          0 |          1 |      3,767 |
+| /Users/elibutters/Documents/HITM/S9_testing.ipynb                     | JSON         |         45 |          0 |          1 |         46 |
+| /Users/elibutters/Documents/HITM/all_models/DNN_3951028_FULL_FINAL.pt | XML          |      2,130 |          0 |          7 |      2,137 |
+| /Users/elibutters/Documents/HITM/all_models/DNN_4305679.pt            | XML          |        563 |          0 |          1 |        564 |
+| /Users/elibutters/Documents/HITM/all_models/DNN_4384076_FULL.pt       | XML          |      2,147 |          0 |         11 |      2,158 |
+| /Users/elibutters/Documents/HITM/all_models/DNN_4926327.pt            | XML          |        516 |          0 |          3 |        519 |
+| /Users/elibutters/Documents/HITM/all_models/DNN_5704496_FULL.pt       | XML          |        772 |          0 |          3 |        775 |
+| /Users/elibutters/Documents/HITM/all_models/DNN_7447759_FULL.pt       | XML          |      2,044 |          0 |          8 |      2,052 |
+| /Users/elibutters/Documents/HITM/all_models/DNN_8030858.pt            | XML          |      2,084 |          0 |          9 |      2,093 |
+| /Users/elibutters/Documents/HITM/all_models/DNN_9020300.pt            | XML          |        548 |          0 |          6 |        554 |
+| /Users/elibutters/Documents/HITM/all_models/LSTM_5893429.pt           | XML          |    104,660 |          0 |        443 |    105,103 |
+| /Users/elibutters/Documents/HITM/all_models/VAE_10d_1090926.pt        | XML          |     45,535 |          0 |        192 |     45,727 |
+| /Users/elibutters/Documents/HITM/all_models/VAE_10d_2737205.pt        | XML          |     44,231 |          0 |        149 |     44,380 |
+| /Users/elibutters/Documents/HITM/all_models/VAE_10d_5190239.pt        | XML          |     45,535 |          0 |        192 |     45,727 |
+| /Users/elibutters/Documents/HITM/all_models/VAE_10d_9554454.pt        | XML          |     28,513 |          0 |        123 |     28,636 |
+| /Users/elibutters/Documents/HITM/all_models/VAE_5d.pt                 | XML          |      5,376 |          0 |         20 |      5,396 |
+| /Users/elibutters/Documents/HITM/data/2010-2023FILTERED.csv           | (Read Error) |          0 |          0 |          0 |          0 |
+| /Users/elibutters/Documents/HITM/data/2010-2023FILTERED_MOREDELTA.csv | (Read Error) |          0 |          0 |          0 |          0 |
+| /Users/elibutters/Documents/HITM/data/Exogenous_Variables.csv         | CSV          |      3,410 |          0 |          1 |      3,411 |
+| /Users/elibutters/Documents/HITM/data/Initial_Jobless_Claims.csv      | CSV          |      2,986 |          0 |          1 |      2,987 |
+| /Users/elibutters/Documents/HITM/data/SPY.csv                         | CSV          |      3,775 |          0 |          0 |      3,775 |
+| /Users/elibutters/Documents/HITM/data/VIX_History.csv                 | CSV          |      8,554 |          0 |          1 |      8,555 |
+| /Users/elibutters/Documents/HITM/dataloader.py                        | Python       |        204 |         10 |         56 |        270 |
+| /Users/elibutters/Documents/HITM/model_scores/DNN.csv                 | CSV          |          8 |          0 |          1 |          9 |
+| /Users/elibutters/Documents/HITM/model_scores/LSTM.csv                | CSV          |          2 |          0 |          1 |          3 |
+| /Users/elibutters/Documents/HITM/model_scores/VAE.csv                 | CSV          |          2 |          0 |          1 |          3 |
+| /Users/elibutters/Documents/HITM/models.py                            | Python       |        417 |         32 |        119 |        568 |
+| Total                                                                 |              |    345,132 |         42 |      1,359 |    346,533 |
++-----------------------------------------------------------------------+--------------+------------+------------+------------+------------+
