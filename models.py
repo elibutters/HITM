@@ -12,6 +12,7 @@ from math import sqrt
 from ast import literal_eval
 import pickle
 from torch.autograd import Variable
+from IPython.display import clear_output
 from dataloader import getLSTM_Dataloader, getVAE_DataLoader, getUnscaledData, IVSDataForVAE
 
 ########################
@@ -62,15 +63,15 @@ class DNNVAE(nn.Module):
                 self.decoder.add_module(f'activation: {i}', nn.LeakyReLU(0.1, inplace=True))
                 self.decoder.add_module(f'dropout: {i}', nn.Dropout(0.25))
 
-        self.encoder.add_module(f'Last', nn.Linear(hidden_size//2, latent_dim))
+        #self.encoder.add_module(f'Last', nn.Linear(hidden_size//2, latent_dim))
         self.latent_mean = nn.Linear(hidden_size//2, latent_dim)
         self.latent_var = nn.Linear(hidden_size//2, latent_dim)
 
     def encoding_fn(self, x):
         x = self.encoder(x)
-        #latent_mean, latent_var = self.latent_mean(x), self.latent_var(x)
-        #encoded = self.reparamterize(latent_mean, latent_var)
-        return x
+        latent_mean, latent_var = self.latent_mean(x), self.latent_var(x)
+        encoded = self.reparamterize(latent_mean, latent_var)
+        return encoded
     
     def reparamaterize(self, latent_mu, latent_var):
         eps = torch.randn(latent_mu.size(0), latent_mu.size(1))
@@ -79,12 +80,12 @@ class DNNVAE(nn.Module):
     
     def forward(self, x):
         x = self.encoder(x)
-        #latent_mean, latent_var = self.latent_mean(x), self.latent_var(x)
-        #encoded = self.reparamaterize(latent_mean, latent_var)
-        decoded = self.decoder(x)
+        latent_mean, latent_var = self.latent_mean(x), self.latent_var(x)
+        encoded = self.reparamaterize(latent_mean, latent_var)
+        decoded = self.decoder(encoded)
         #print(decoded.shape)
-        #return encoded, latent_mean, latent_var, decoded
-        return 0, 0, 0, decoded
+        return encoded, latent_mean, latent_var, decoded
+        #return 0, 0, 0, decoded
     
     def decode(self, latent_mu, latent_var):
         x = self.reparamaterize(latent_mu, latent_var)
@@ -196,14 +197,14 @@ def train_VAE(num_epochs, model, optimizer, dataloader, NNtype, loss_fn=None, lo
             #print(decoded.shape, features.shape)
             #print(decoded.shape)
 
-            #kl_div = -0.5 * torch.sum(1 + latent_var - latent_mean**2 - torch.exp(latent_var), axis=1)
+            kl_div = -0.5 * torch.sum(1 + latent_var - latent_mean**2 - torch.exp(latent_var), axis=1)
 
-            #batch_size = kl_div.size(0)
-            #kl_div = kl_div.mean()
+            batch_size = kl_div.size(0)
+            kl_div = kl_div.mean()
 
-            #re_loss = loss_fn(decoded, features, reduction='mean')
+            re_loss = loss_fn(decoded, features, reduction='mean')
 
-            #loss = re_loss + (kl_divergence_weight * kl_div)
+            loss = re_loss + (kl_divergence_weight * kl_div)
             loss = loss_fn(decoded, features, reduction='mean')
             loss_history.append(loss.item())
 
@@ -386,11 +387,15 @@ def train_LSTM(num_epochs, model, optimizer, dataloader, loss_fn=None, logging_i
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            loss_chart.append(loss.item())
+            loss_chart.append(min(loss.item(), 1.0))
 
             if idx % logging_interval == 0:
                 print(f'Epoch: {epoch} | Loss: {loss:.3f} | Time Elapsed: {((time.time() - start_time)/60):.2f} min')
         scheduler.step(loss)
+        if epoch % 5 == 0:
+            clear_output()
+            plt.plot(loss_chart)
+            plt.show()
     return loss_chart
 
 def eval_LSTM(model, dataloader, full_ivs, loss_fn=None):
@@ -592,7 +597,7 @@ class PredictiveEngine():
         but_chart = []
         preds = []
         targets = []
-        iv_data = getVAE_DataLoader(section='all', batch_size=1, scale=False, scaler_id=self.vae.getID())
+        iv_data = getVAE_DataLoader(section='all', batch_size=1, scale=False, scaler_id=self.vae.getID(), filepath='data/R2_STD_IVS_DFW_SORTED.pkl')
         iv_data_subs = IVSDataForVAE(section=section, pkl_path='data/R2_STD_IVS_DFW_SORTED.pkl', scale=False, scaler_id=None, scaler_path=None)
         if self.use_VAE:
             data = getLSTM_Dataloader(section=section, vae_model=self.vae, iv_dataloader=iv_data, scale=True, NNtype='DNN', batch_size=2, full_ivs=False, scaler_id=self.lstm.getID())
@@ -610,7 +615,7 @@ class PredictiveEngine():
                 feature = feature[:, None, :]
                 output = self.lstm(feature)
                 if self.use_VAE:
-                    '''
+                    
                     latent_means = []
                     latent_vars = []
                     for o_idx, tensor in enumerate(output):
@@ -623,8 +628,8 @@ class PredictiveEngine():
                                 latent_vars[o_idx].append(item.item())
                     latent_means = torch.tensor(latent_means, dtype=torch.float32)
                     latent_vars = torch.tensor(latent_vars, dtype=torch.float32)
-                    vae_out = self.vae.decode(latent_means, latent_vars)'''
-                    vae_out = self.vae.decoder(output)
+                    vae_out = self.vae.decode(latent_means, latent_vars)
+                    #vae_out = self.vae.decoder(output)
                     output = getUnscaledData(vae_out, f'scalers/VAE_scaler_{self.vae.getID()}.pkl')
                 else:
                     output = getUnscaledData(output, f'scalers/LSTM_scaler_o_{self.lstm.getID()}.pkl')

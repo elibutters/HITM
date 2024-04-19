@@ -54,7 +54,7 @@ class IVSDataForVAE(Dataset):
     def __len__(self):
         return len(self.ivs)
 
-def getVAE_DataLoader(section, scale, scaler_id, scaler_path='scalers/VAE_scaler', filepath='data/R2_STD_IVS_DFW_SORTED.pkl', transform=None, batch_size=32, drop_last=False, shuffle=True, num_workers=0):
+def getVAE_DataLoader(section, scale, scaler_id, scaler_path='scalers/VAE_scaler', filepath='data/R2_STD_IVS_DFW.pkl', transform=None, batch_size=32, drop_last=False, shuffle=True, num_workers=0):
     dataset = IVSDataForVAE(section, pkl_path=filepath, transform=transform, scale=scale, scaler_path=scaler_path, scaler_id=scaler_id)
     dataloader = DataLoader(dataset=dataset, batch_size=batch_size, drop_last=drop_last, shuffle=shuffle, num_workers=num_workers)
     return dataloader
@@ -64,7 +64,7 @@ def getVAE_DataLoader(section, scale, scaler_id, scaler_path='scalers/VAE_scaler
 ########################
 
 class LSTMData(Dataset):
-    def __init__(self, section, vae_model, iv_dataloader, scale, scaler_i_path, scaler_o_path, NNtype, full_ivs, scaler_id, ev_path='data/Exogenous_Variables.csv', ivs_path='data/R2_STD_IVS_DFW_SORTED.pkl', transform=None):
+    def __init__(self, section, vae_model, iv_dataloader, scale, scaler_i_path, scaler_o_path, NNtype, full_ivs, scaler_id, ev_path='data/Exogenous_Variables.csv', ivs_path='data/R2_STD_IVS_DFW.pkl', transform=None):
         exogenous = pd.read_csv(ev_path)
         self.transform = transform
         if vae_model is not None:
@@ -73,9 +73,9 @@ class LSTMData(Dataset):
         input_data = exogenous.copy()
         input_data.drop(columns='Unnamed: 0', inplace=True)
         drop_cols = input_data.columns
-        #means = []
-        #var = []
-        encoded = []
+        means = []
+        var = []
+        #encoded = []
 
         if full_ivs:
             with open(ivs_path, 'rb') as f:
@@ -97,32 +97,33 @@ class LSTMData(Dataset):
                         feature = feature.unsqueeze(1)
                     elif NNtype =='DNN':
                         feature = feature.view(feature.shape[0], -1)
-                    #_, latent_mean, latent_var, _ = vae_model(feature)
-                    enc = vae_model.encoding_fn(feature)
-                    encoded.append(enc.numpy()[0])
+                    _, latent_mean, latent_var, _ = vae_model(feature)
+                    #enc = vae_model.encoding_fn(feature)
+                    #encoded.append(enc.numpy()[0])
 
-                    #latent_mean = latent_mean.numpy()[0]
-                    #latent_var = latent_var.numpy()[0]
-                    #means.append(latent_mean)
-                    #var.append(latent_var)
+                    latent_mean = latent_mean.numpy()[0]
+                    latent_var = latent_var.numpy()[0]
+                    means.append(latent_mean)
+                    var.append(latent_var)
 
-            #latent_size = len(means[0])
-            latent_size = len(encoded[0])
+            latent_size = len(means[0])
+            #latent_size = len(encoded[0])
             for idx in range(latent_size):
-                #input_data[f'latent_mean_{idx}'] = np.nan
-                #input_data[f'latent_var_{idx}'] = np.nan
-                input_data[f'encoded_{idx}'] = np.nan
+                input_data[f'latent_mean_{idx}'] = np.nan
+                input_data[f'latent_var_{idx}'] = np.nan
+                #input_data[f'encoded_{idx}'] = np.nan
 
-            #for idx in range(len(means)):
-            for idx in range(len(encoded)):
+            for idx in range(len(means)):
+            #for idx in range(len(encoded)):
                 for mini_idx in range(latent_size):
-                    #input_data.loc[idx, f'latent_mean_{mini_idx}'] = means[idx][mini_idx]
-                    #input_data.loc[idx, f'latent_var_{mini_idx}'] = var[idx][mini_idx]
-                    input_data.loc[idx, f'encoded_{mini_idx}'] = encoded[idx][mini_idx]
+                    input_data.loc[idx, f'latent_mean_{mini_idx}'] = means[idx][mini_idx]
+                    input_data.loc[idx, f'latent_var_{mini_idx}'] = var[idx][mini_idx]
+                    #input_data.loc[idx, f'encoded_{mini_idx}'] = encoded[idx][mini_idx]
 
         targets = input_data.copy()
         targets.drop(columns=drop_cols, inplace=True)
         targets = targets.shift(-1)
+        #print(input_data)
 
         if section == 'train':
             input_data = input_data[:2387]
@@ -178,7 +179,7 @@ class LSTMData(Dataset):
     def __len__(self):
         return len(self.input_data)
     
-def getLSTM_Dataloader(section, vae_model, iv_dataloader, scale, NNtype, full_ivs, scaler_id, scaler_i_path='scalers/LSTM_scaler_i', scaler_o_path='scalers/LSTM_scaler_o', ivs_path='data/R2_STD_IVS_DFW_SORTED.pkl', ev_path='data/Exogenous_Variables.csv', transform=None, batch_size=32, drop_last=False, shuffle=False, num_workers=0):
+def getLSTM_Dataloader(section, vae_model, iv_dataloader, scale, NNtype, full_ivs, scaler_id, scaler_i_path='scalers/LSTM_scaler_i', scaler_o_path='scalers/LSTM_scaler_o', ivs_path='data/R2_STD_IVS_DFW.pkl', ev_path='data/Exogenous_Variables.csv', transform=None, batch_size=32, drop_last=False, shuffle=False, num_workers=0):
     dataset = LSTMData(section=section, vae_model=vae_model, iv_dataloader=iv_dataloader, scale=scale, scaler_i_path=scaler_i_path, scaler_o_path=scaler_o_path, ivs_path=ivs_path, ev_path=ev_path, transform=transform, NNtype=NNtype, full_ivs=full_ivs, scaler_id=scaler_id)
     dataloader = DataLoader(dataset=dataset, batch_size=batch_size, drop_last=drop_last, shuffle=shuffle, num_workers=num_workers)
     return dataloader
@@ -195,7 +196,7 @@ def getUnscaledData(data, scaler_path):
 ########################
 
 class DNNData(Dataset):
-    def __init__(self, section, scale, scaler_i_path, scaler_o_path, scaler_id, ivs_path='data/R2_STD_IVS_DFW_SORTED.pkl', transform=None):
+    def __init__(self, section, scale, scaler_i_path, scaler_o_path, scaler_id, ivs_path='data/R2_STD_IVS_DFW.pkl', transform=None):
         self.transform = transform
         with open(ivs_path, 'rb') as file:
             ivs = pickle.load(file)
@@ -254,7 +255,7 @@ class DNNData(Dataset):
     def __len__(self):
         return len(self.input_data)
     
-def getDNNData(section, scale, scaler_id, ivs_path='data/R2_STD_IVS_DFW_SORTED.pkl', transform=None, batch_size=121, drop_last=False, shuffle=False, num_workers=0):
+def getDNNData(section, scale, scaler_id, ivs_path='data/R2_STD_IVS_DFW.pkl', transform=None, batch_size=121, drop_last=False, shuffle=False, num_workers=0):
     dataset = DNNData(section=section, scale=scale, ivs_path=ivs_path, transform=transform, scaler_i_path='scalers/DNN_scaler_i', scaler_o_path='scalers/DNN_scaler_o', scaler_id=scaler_id)
     dataloader = DataLoader(dataset=dataset, batch_size=batch_size, drop_last=drop_last, shuffle=shuffle, num_workers=num_workers)
     return dataloader
