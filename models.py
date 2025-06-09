@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 from math import sqrt
 from ast import literal_eval
 import pickle
+import copy
 from torch.autograd import Variable
 from IPython.display import clear_output
 from dataloader import getLSTM_Dataloader, getVAE_DataLoader, getUnscaledData, IVSDataForVAE
@@ -226,6 +227,8 @@ def eval_VAE(model, dataloader, NNtype, loss_fn=None):
 
     loss_chart = []
 
+    
+
     model.eval()
     with torch.no_grad():
         for features in dataloader:
@@ -264,20 +267,190 @@ def saveVAE(model, learning_rate, batch_size, num_epochs, latent_dim, vae_type, 
     print('VAE Successfully Saved')
 
 ########################
+# MULT SELF ATT LSTM
+########################
+    
+class MultSelfAttentionLSTM(nn.Module):
+    def __init__(self, latent_dim, hidden_size, num_layers, full_ivs, use_exog, num_heads=8):
+        super(MultSelfAttentionLSTM, self).__init__()
+        self.ID = random.randint(0, 10000000)
+
+        if full_ivs:
+            if use_exog:
+                input_size = 131
+            else:
+                input_size = 121
+            self.lstm1 = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
+            self.fc = nn.Linear(hidden_size, 121)
+        else:
+            if use_exog:
+                input_size = 10 + 2 * latent_dim
+            else:
+                input_size = 2 * latent_dim
+            self.lstm1 = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
+            self.fc = nn.Linear(hidden_size, 2*latent_dim)
+
+        for name, param in self.lstm1.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param)
+            elif 'bias' in name:
+                nn.init.zeros_(param)
+
+        self.dropout1 = nn.Dropout(0.25)
+        self.query = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(num_heads)])
+        self.key = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(num_heads)])
+        self.value = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(num_heads)])
+        self.attention_combine = nn.Linear(num_heads * hidden_size, hidden_size)
+
+        self.layer_norm = nn.ModuleList([
+            nn.LayerNorm(hidden_size) for _ in range(num_layers//2)
+        ])
+        self.feedforward = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(hidden_size, hidden_size),
+                nn.ReLU(),
+                nn.Linear(hidden_size, hidden_size)
+            ) for _ in range(num_layers//2)
+        ])
+
+        self.lstm2 = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, num_layers=num_layers//2, batch_first=True, dropout=0.25)
+
+        for name, param in self.lstm2.named_parameters():
+                if 'weight' in name:
+                    nn.init.xavier_normal_(param)
+                elif 'bias' in name:
+                    nn.init.zeros_(param)
+
+        self.dropout2 = nn.Dropout(0.25)
+        self.dropout3 = nn.Dropout(0.25)
+
+    def forward(self, x):
+        out, _ = self.lstm1(x)
+        out = self.dropout1(out)
+
+        for i in range(len(self.query)):
+            query = self.query[i](out)
+            key = self.key[i](out)
+            value = self.value[i](out)
+
+            attention_weights = torch.matmul(query, key.transpose(1, 2) / torch.sqrt(torch.tensor(out.size(-1), dtype=torch.float32)))
+            attention_weights = torch.softmax(attention_weights, dim=-1)
+            attention_output = torch.matmul(attention_weights, value)
+
+            if i == 0:
+                attention_outputs = attention_output
+            else:
+                attention_outputs = torch.cat((attention_outputs, attention_output), dim=-1)
+
+        attention_output = self.attention_combine(attention_outputs)
+        out = self.layer_norm[0](out + self.dropout2(self.feedforward[0](attention_output)))
+
+        for i in range(1, len(self.layer_norm)):
+            out = self.layer_norm[i](out + self.dropout2(self.feedforward[i](out)))
+
+        out, _ = self.lstm2(out)
+        out = self.dropout3(out)
+        output = self.fc(out[:, -1, :])
+        return output
+    
+    def getID(self):
+        return self.ID
+
+########################
+# MULT ATT LSTM
+########################
+
+class MultAttentionLSTM(nn.Module):
+    def __init__(self, latent_dim, hidden_size, num_layers, full_ivs, use_exog, num_heads=8):
+        super(MultAttentionLSTM, self).__init__()
+        self.ID = random.randint(0, 10000000)
+
+        if full_ivs:
+            if use_exog:
+                #input_size = 131
+                input_size = 393
+            else:
+                input_size = 121
+            self.lstm1 = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
+            self.fc = nn.Linear(hidden_size, 121)
+        else:
+            if use_exog:
+                #input_size = 10 + 2 * latent_dim
+                input_size = 3 * (10 + 2 * latent_dim)
+            else:
+                input_size = 2 * latent_dim
+            self.lstm1 = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
+            self.fc = nn.Linear(hidden_size, 2*latent_dim)
+            #self.fc = nn.Linear(hidden_size, 121)
+
+        for name, param in self.lstm1.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param)
+            elif 'bias' in name:
+                nn.init.zeros_(param)
+
+        self.dropout1 = nn.Dropout(0.25)
+        self.attention_heads = nn.ModuleList([
+            nn.Linear(hidden_size, hidden_size) for _ in range(num_heads)
+        ])
+        self.softmax = nn.Softmax(dim=1)
+        self.attention_combine = nn.Linear(num_heads * hidden_size, hidden_size)
+        self.lstm2 = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, num_layers=num_layers, dropout=0.25, batch_first=True)
+
+        for name, param in self.lstm2.named_parameters():
+                if 'weight' in name:
+                    nn.init.xavier_normal_(param)
+                elif 'bias' in name:
+                    nn.init.zeros_(param)
+
+        self.dropout2 = nn.Dropout(0.25)
+
+    def forward(self, x, hidden):
+        out, hidden = self.lstm1(x, hidden)
+        out = self.dropout1(out)
+
+        attention_weights = torch.stack([attention_head(out) for attention_head in self.attention_heads], dim=2)
+        attention_weights = self.softmax(attention_weights)
+        context = torch.sum(out.unsqueeze(2) * attention_weights, dim=1)
+
+        attention_output = context.view(context.size(0), -1)
+        attention_output = self.attention_combine(attention_output)
+
+        attention_output = attention_output.unsqueeze(1)
+        out, hidden = self.lstm2(attention_output, hidden)
+        out = self.dropout2(out)
+
+        output = self.fc(out[:, -1, :])
+        return output, hidden
+    
+    def getID(self):
+        return self.ID
+
+########################
 # ATT LSTM
 ########################
 
 class AttentionLSTM(nn.Module):
-    def __init__(self, latent_dim, hidden_size, num_layers, full_ivs):
+    def __init__(self, latent_dim, hidden_size, num_layers, full_ivs, use_exog):
         super(AttentionLSTM, self).__init__()
         self.ID = random.randint(0, 10000000)
 
         if full_ivs:
-            self.lstm1 = nn.LSTM(input_size=131, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
+            if use_exog:
+                input_size = 131
+            else:
+                input_size = 121
+            self.lstm1 = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
             self.fc = nn.Linear(hidden_size, 121)
         else:
-            self.lstm1 = nn.LSTM(input_size=(10 + 2 * latent_dim), hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
+            if use_exog:
+                #input_size = 10 + 2 * latent_dim
+                input_size = 3 * (10 + 2 * latent_dim)
+            else:
+                input_size = 2 * latent_dim
+            self.lstm1 = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
             self.fc = nn.Linear(hidden_size, 2*latent_dim)
+            #self.fc = nn.Linear(hidden_size, 121)
 
         for name, param in self.lstm1.named_parameters():
             if 'weight' in name:
@@ -305,7 +478,7 @@ class AttentionLSTM(nn.Module):
         attention_weights = self.attention(out)
         attention_weights = self.softmax(attention_weights)
         context = torch.sum(out * attention_weights, dim=1)
-
+        
         context = context.unsqueeze(1)
         out, _ = self.lstm2(context)
         out = self.dropout2(out)
@@ -321,18 +494,27 @@ class AttentionLSTM(nn.Module):
 ########################
 
 class LSTM(nn.Module):
-    def __init__(self, hidden_size, num_layers, latent_dim, full_ivs):
+    def __init__(self, hidden_size, num_layers, latent_dim, full_ivs, use_exog):
         super(LSTM, self).__init__()
         self.ID = random.randint(0, 10000000)
 
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         if full_ivs:
-            self.lstm = nn.LSTM(input_size=131, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
+            if use_exog:
+                input_size = 131
+            else:
+                input_size = 121
+            self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
             self.fc = nn.Linear(hidden_size, 121)
         else:
-            self.lstm = nn.LSTM(input_size=(10 + 2 * latent_dim), hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
+            if use_exog:
+                input_size = 10 + 2 * latent_dim
+            else:
+                input_size = 2 * latent_dim
+            self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
             self.fc = nn.Linear(hidden_size, 2 * latent_dim)
+            #self.fc = nn.Linear(hidden_size, 121)
             #self.lstm = nn.LSTM(input_size=(10 + latent_dim), hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.25)
             #self.fc = nn.Linear(hidden_size, latent_dim)
         for name, param in self.lstm.named_parameters():
@@ -370,13 +552,16 @@ def train_LSTM(num_epochs, model, optimizer, dataloader, loss_fn=None, logging_i
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True)
     loss_chart = []
 
+    hidden = (torch.zeros(4, 8, 256), torch.zeros(4, 8, 256))
+    torch.autograd.set_detect_anomaly(True)
     start_time = time.time()
     for epoch in range(num_epochs):
         model.train()
+        
         for idx, (feature, target) in enumerate(dataloader):
             feature = feature[:, None, :]
 
-            outputs = model(feature)
+            outputs, hidden = model.forward(feature, hidden)
             batch_size = outputs.shape[0]
 
             loss = loss_fn(outputs, target, reduction='mean')
@@ -384,31 +569,39 @@ def train_LSTM(num_epochs, model, optimizer, dataloader, loss_fn=None, logging_i
             
             optimizer.zero_grad()
             loss.backward()
+            hidden = (hidden[0].detach(), hidden[1].detach())
+
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            loss_chart.append(min(loss.item(), 1.0))
+            loss_chart.append(min(loss.item(), 0.5))
 
             if idx % logging_interval == 0:
                 print(f'Epoch: {epoch} | Loss: {loss:.3f} | Time Elapsed: {((time.time() - start_time)/60):.2f} min')
         scheduler.step(loss)
         if epoch % 5 == 0:
             clear_output()
-            plt.plot(loss_chart)
-            plt.show()
-    return loss_chart
+            plt.plot(loss_chart, color='b')
+            
+            test = pd.DataFrame(loss_chart)
+            test['rolling'] = test.rolling(299, min_periods=1).mean()
 
-def eval_LSTM(model, dataloader, full_ivs, loss_fn=None):
+            plt.plot(test['rolling'], color='r')
+            plt.show()
+    return loss_chart, hidden
+
+def eval_LSTM(model, dataloader, iv_data, loss_fn=None):
     if loss_fn is None:
         loss_fn = F.mse_loss
     
     loss_chart = []
 
+    hidden = (torch.zeros(4, 8, 256), torch.zeros(4, 8, 256))
     model.eval()
     with torch.no_grad():
         for features, target in dataloader:
             features = features[:, None, :]
-            outputs = model(features)
+            outputs, hidden = model(features, hidden)
 
             loss = loss_fn(outputs, target, reduction='mean')
 
@@ -417,7 +610,28 @@ def eval_LSTM(model, dataloader, full_ivs, loss_fn=None):
     return loss_chart
 
 ########################
-# DNN
+# DNN Pred
+########################
+
+class PredDNN(nn.Module):
+    def __init__(self, hidden_size, num_layers, full_ivs, latent_dim, use_exog):
+        super(PredDNN, self).__init__()
+        self.ID = random.randint(0, 10000000)
+
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+
+        if full_ivs:
+            if use_exog:
+                input_size = 131
+            else:
+                input_size = 121
+            self.dnn = nn.Sequential(
+                nn.Linear(input_size=input_size)
+            )
+
+########################
+# DNN Arb Free
 ########################
 
 def make_grid():
@@ -485,7 +699,7 @@ class ArbFreeDNN(nn.Module):
     def getID(self):
         return self.ID
 
-def train_DNN(num_epochs, model, dataloader, optimizer, arb_mult, loss_fn=None, logging_interval=1, save_model=None):
+def train_DNN(num_epochs, model, train_dataloader, optimizer, arb_mult, test_dataloader=None, loss_fn=None, logging_interval=1, save_model=None):
     if loss_fn is None:
         #insert arb free loss here
         loss_re = F.mse_loss
@@ -500,7 +714,7 @@ def train_DNN(num_epochs, model, dataloader, optimizer, arb_mult, loss_fn=None, 
     start_time = time.time()
     for epoch in range(num_epochs):
         model.train()
-        for idx, (feature, target) in enumerate(dataloader):
+        for idx, (feature, target) in enumerate(train_dataloader):
             feature.requires_grad = True
             output = model(feature)
             #batch_size = output.shape[0]
@@ -519,7 +733,7 @@ def train_DNN(num_epochs, model, dataloader, optimizer, arb_mult, loss_fn=None, 
             but_loss_chart.append(but.item())
 
             if idx % logging_interval == 0:
-                print(f'Epoch: {epoch} | Progress: {(idx / len(dataloader)):.2f}| Loss: {loss:.6f} | Time Elapsed: {((time.time() - start_time)/60):.2f} min')
+                print(f'Epoch: {epoch} | Progress: {(idx / len(train_dataloader)):.2f}| Loss: {loss:.6f} | Time Elapsed: {((time.time() - start_time)/60):.2f} min')
         scheduler.step(loss)
 
     return loss_chart, re_loss_chart, cal_loss_chart, but_loss_chart
@@ -541,7 +755,7 @@ def eval_DNN(model, dataloader, loss_fn=None):
         re = re_loss(output, target, reduction='mean')
         cal, but = arb_loss(features, output)
 
-        loss_chart_re.append(re.item())
+        loss_chart_re.append(sqrt(re.item()))
         loss_chart_cal.append(cal.item())
         loss_chart_but.append(but.item())
 
@@ -585,6 +799,17 @@ class PredictiveEngine():
         self.dnn = trained_DNN
         self.use_VAE = use_VAE
 
+        lstm_models = pd.read_csv('model_scores/LSTM.csv')
+        lstm_ids = lstm_models['ID#']
+
+        lstm_id = self.lstm.ID
+        lstm_idx = 0
+        for idx in range(len(lstm_ids)):
+            if int(lstm_id) == lstm_ids.iloc[idx]:
+                lstm_idx = idx
+
+        self.use_exog = lstm_models.iloc[lstm_idx]['USE_EXOG']
+
     def validate(self, section, loss_fn=None):
         if loss_fn is None:
             loss_fn = F.mse_loss
@@ -600,20 +825,21 @@ class PredictiveEngine():
         iv_data = getVAE_DataLoader(section='all', batch_size=1, scale=False, scaler_id=self.vae.getID(), filepath='data/R2_STD_IVS_DFW_SORTED.pkl')
         iv_data_subs = IVSDataForVAE(section=section, pkl_path='data/R2_STD_IVS_DFW_SORTED.pkl', scale=False, scaler_id=None, scaler_path=None)
         if self.use_VAE:
-            data = getLSTM_Dataloader(section=section, vae_model=self.vae, iv_dataloader=iv_data, scale=True, NNtype='DNN', batch_size=2, full_ivs=False, scaler_id=self.lstm.getID())
+            data = getLSTM_Dataloader(section=section, vae_model=self.vae, iv_dataloader=iv_data, scale=True, NNtype='DNN', batch_size=2, full_ivs=False, scaler_id=self.lstm.getID(), use_exog=self.use_exog)
         else:
-            data = getLSTM_Dataloader(section=section, vae_model=None, iv_dataloader=iv_data, scale=True, NNtype='DNN', batch_size=2, full_ivs=True, scaler_id=self.lstm.getID())
+            data = getLSTM_Dataloader(section=section, vae_model=None, iv_dataloader=iv_data, scale=True, NNtype='DNN', batch_size=2, full_ivs=True, scaler_id=self.lstm.getID(), use_exog=self.use_exog)
         self.lstm.eval()
         self.dnn.eval()
         self.vae.eval()
         count = 1
+        hidden = (torch.zeros(4, 2, 256), torch.zeros(4, 2, 256))
         with torch.no_grad():
             for feature, _ in data:
                 if count >= 510:
                     break
                 og_feature = iv_data_subs[count-1]
                 feature = feature[:, None, :]
-                output = self.lstm(feature)
+                output, hidden = self.lstm(feature, hidden)
                 if self.use_VAE:
                     
                     latent_means = []
@@ -679,9 +905,9 @@ def getModels(vae_id, lstm_id, dnn_id):
         for idx in range(len(vae_ids)):
             if int(vae_id) == vae_ids.iloc[idx]:
                 vae_idx = idx
-        latent_dim = vae_models.iloc[vae_idx]['LATENT_DIM']
-        num_layers = vae_models.iloc[vae_idx]['NUM_LAYERS']
-        hidden_size = vae_models.iloc[vae_idx]['HIDDEN_SIZE']
+        latent_dim = int(vae_models.iloc[vae_idx]['LATENT_DIM'])
+        num_layers = int(vae_models.iloc[vae_idx]['NUM_LAYERS'])
+        hidden_size = int(vae_models.iloc[vae_idx]['HIDDEN_SIZE'])
         vae_type = vae_models.iloc[vae_idx]['VAE_TYPE']
         if vae_type == 'DNN':
             vae = DNNVAE(latent_dim=latent_dim, num_layers=num_layers, hidden_size=hidden_size)
@@ -701,11 +927,18 @@ def getModels(vae_id, lstm_id, dnn_id):
         num_layers = lstm_models.iloc[lstm_idx]['NUM_LAYERS']
         latent_dim = lstm_models.iloc[lstm_idx]['LATENT_DIM']
         full_ivs = lstm_models.iloc[lstm_idx]['FULL_IVS']
+        num_heads = lstm_models.iloc[lstm_idx]['NUM_HEADS']
+        use_exog = lstm_models.iloc[lstm_idx]['USE_EXOG']
         att = lstm_models.iloc[lstm_idx]['ATT']
-        if att:
-            lstm = AttentionLSTM(hidden_size=int(hidden_size), num_layers=int(num_layers), latent_dim=int(latent_dim), full_ivs=full_ivs)
+        self_att = lstm_models.iloc[lstm_idx]['SELF']
+        if att and self_att and num_heads >= 1:
+            lstm = MultSelfAttentionLSTM(hidden_size=int(hidden_size), num_layers=int(num_layers)//2, latent_dim=int(latent_dim), full_ivs=full_ivs, use_exog=use_exog, num_heads=int(num_heads))
+        elif att and num_heads == 1:
+            lstm = AttentionLSTM(hidden_size=int(hidden_size), num_layers=int(num_layers)//2, latent_dim=int(latent_dim), full_ivs=full_ivs, use_exog=use_exog)
+        elif att and num_heads > 1:
+            lstm = MultAttentionLSTM(hidden_size=int(hidden_size), num_layers=int(num_layers)//2, latent_dim=int(latent_dim), full_ivs=full_ivs, num_heads=int(num_heads), use_exog=use_exog)
         else:
-            lstm = LSTM(hidden_size=int(hidden_size), num_layers=int(num_layers), latent_dim=int(latent_dim), full_ivs=full_ivs)
+            lstm = LSTM(hidden_size=int(hidden_size), num_layers=int(num_layers), latent_dim=int(latent_dim), full_ivs=full_ivs, use_exog=use_exog)
         lstm.load_state_dict(torch.load(f'all_models/LSTM_{lstm_id}.pt'))
         lstm.ID = int(lstm_id)
     #############

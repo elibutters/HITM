@@ -1,3 +1,32 @@
+# IDE and workspace settings
+.vscode/
+.vscodecounter/
+
+# Python cache
+__pycache__/
+
+# Model and scaler directories (potentially large)
+all_models/
+model_scores/
+scalers/
+
+# Data directory (potentially large, except for small test/demo files)
+data/
+
+# Ignore specific large data files (already present)
 data/2010-2023FILTERED.csv
 data/2010-2023FILTERED_MOREDELTA.csv
 data/R1_10-23_IVS_MOREDELTA.csv
+
+# Ignore common model/scaler artifacts
+*.pt
+*.pth
+*.pkl
+*.joblib
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS generated files
+.DS_Store
+Thumbs.db
