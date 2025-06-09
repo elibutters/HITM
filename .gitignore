@@ -17,6 +17,7 @@ data/
 data/2010-2023FILTERED.csv
 data/2010-2023FILTERED_MOREDELTA.csv
 data/R1_10-23_IVS_MOREDELTA.csv
+data/R1_10-23_IVS_MOREDELTA_ANN.pkl
 
 # Ignore common model/scaler artifacts
 *.pt
