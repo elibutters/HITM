@@ -1,4 +1,4 @@
-# Arbitrage-Free Prediction of the Implied Volatility Surface with Temporal Attention Strategy
+# Arbitrage-Free Prediction of the Implied Volatility Surface with Temporal Attention
 
 ## Overview
 
